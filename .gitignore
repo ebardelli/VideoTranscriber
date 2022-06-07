@@ -1,5 +1,8 @@
 # Videos
 *.mp4
+*.wav
 
-# Pipfile lock
-Pipfile.lock
+Videos/
+Audio/
+Models/
+Transcripts/

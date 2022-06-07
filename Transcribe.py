@@ -2,7 +2,7 @@ import wave, math, contextlib, os, sys, json, subprocess
 import numpy as np
 
 from moviepy.editor import AudioFileClip
-from vosk import Model, KaldiRecognizer
+from vosk import Model, KaldiRecognizer, SetLogLevel
 
 from pydub import AudioSegment
 from pydub.silence import split_on_silence
@@ -51,20 +51,33 @@ def format_result(result, output_type='txt', words_per_line=7):
 
 # a function that splits the audio file into chunks
 # and applies speech recognition
-def silence_based_conversion(path = ""):
-    audio_file_name = "Audio/audio.wav"
+def silence_based_conversion(video = "", work_dir = "word_dir/"):
+    # Extract audio from video
+    filename = os.path.splitext(os.path.basename(video))[0]
+    audio_file_name = work_dir + "Audio/" + filename +".wav"
 
+    # create a directory to store the audio
+    try:
+        os.mkdir(work_dir + "Audio")
+    except FileExistsError:
+        pass
+
+    try:
+        # open the audio file stored in
+        # the local system as a wav file.
+        clip = AudioSegment.from_wav(audio_file_name)
+    except FileNotFoundError:
+        # Extract audio clip
+        audioclip = AudioFileClip(video)
+        audioclip.write_audiofile(audio_file_name)
+        clip = AudioSegment.from_wav(audio_file_name)
+
+    # Chunk audio using silence
     # create a directory to store the audio chunks.
     try:
-        os.path.exists(audio_file_name)
-    except(FileExistsError):
-        # Extract audio clip
-        audioclip = AudioFileClip(path)
-        audioclip.write_audiofile(audio_file_name)
-
-    # open the audio file stored in
-    # the local system as a wav file.
-    clip = AudioSegment.from_wav(audio_file_name)
+        os.mkdir(work_dir + "Audio/Chunks")
+    except FileExistsError:
+        pass
 
     # split track where silence is 0.5 seconds
     # or more and get chunks
@@ -73,18 +86,7 @@ def silence_based_conversion(path = ""):
         silence_thresh = -40
     )
 
-    # create a directory to store the audio chunks.
-    try:
-        os.mkdir('Audio/Chunks')
-    except(FileExistsError):
-        pass
-
-    # move into the directory to
-    # store the audio files.
-    os.chdir('Audio/Chunks')
-
     i = 0
-
     # process each chunk
     for chunk in chunks:
         # Create 0.5 seconds silence chunk
@@ -95,35 +97,29 @@ def silence_based_conversion(path = ""):
         # it doesn't seem abruptly sliced.
         audio_chunk = chunk_silent + chunk + chunk_silent
 
-        # export audio chunk and save it in
-        # the current directory.
-        print("saving chunk{0}.wav".format(i))
-        # specify the bitrate to be 192 k
-        audio_chunk.export("./chunk{0}.wav".format(i), bitrate ='192k', format ="wav")
+        chunkname = work_dir+"./Audio/Chunks/"+ filename+"{0}.wav".format(i)
+
+        # Set framerate and export
+        audio_chunk.set_frame_rate(16000)
+        audio_chunk.export(chunkname, bitrate ='192k', format ="wav")
 
         # the name of the newly created chunk
-        filename = 'chunk'+str(i)+'.wav'
-
-        print("Processing chunk "+str(i))
-
-        # get the name of the newly created chunk
-        # in the AUDIO_FILE variable for later use.
-        file = filename
 
         # Load model
-        #model_path = "../../Models/vosk-model-en-us-0.22-lgraph/"
-        model_path = "../../Models/vosk-model-small-en-us-0.15/"
+        #model_path = "Models/vosk-model-en-us-0.22-lgraph/"
+        model_path = "Models/vosk-model-small-en-us-0.15/"
         model = Model(model_path)
 
         # Set up recognizer
         rec = KaldiRecognizer(model, 16000)
         rec.SetWords(True)
+        SetLogLevel(-1)
 
-        result, tot_samples = recognize_stream(rec, resample_ffmpeg(file))
+        result, tot_samples = recognize_stream(rec, resample_ffmpeg(chunkname))
         final_result = format_result(result)
         print(final_result)
 
-        f = open("../../Transcripts/test.txt", "a")
+        f = open("Transcripts/"+filename+".txt", "a")
         f.write(final_result)
         f.write("\n")
         f.close()
@@ -138,5 +134,5 @@ if __name__ == '__main__':
     #print('Enter the audio file path')
     #path = input()
 
-    silence_based_conversion("Videos/TestVideo.mp4")
+    silence_based_conversion("Videos/TestVideo.mp4", work_dir = "Videos/")
 

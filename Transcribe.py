@@ -106,8 +106,9 @@ def silence_based_conversion(video = "", work_dir = "word_dir/"):
         # the name of the newly created chunk
 
         # Load model
-        #model_path = "Models/vosk-model-en-us-0.22-lgraph/"
-        model_path = "Models/vosk-model-small-en-us-0.15/"
+        #model_path = "Models/vosk-model-en-us-0.22/"
+        model_path = "Models/vosk-model-en-us-0.22-lgraph/"
+        #model_path = "Models/vosk-model-small-en-us-0.15/"
         model = Model(model_path)
 
         # Set up recognizer

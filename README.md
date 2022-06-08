@@ -1,9 +1,6 @@
-# Models
+# Install
 
-Get the models with
+- Install python packages with: `python3 -m pip install numpy moviepy vosk pydub`
+- Get the ML speech recognition model here: `wget "https://alphacephei.com/vosk/models/"` and unzip in `Models/`. Make sure to update the model name to the one you selected in the python file. At time of writing, there are three models for English: `0.15` (small model), `0.22`, and `0.22-lgraph`. All three seem to work fine.
+- Install `ffpeg`: This is not requirement but I haven't figured out a way around it yet.
 
-- `wget https://alphacephei.com/vosk/models/vosk-model-en-us-0.22-lgraph.zip`
-- `wget https://alphacephei.com/vosk/models/vosk-model-spk-0.4.zip`
-- `wget https://alphacephei.com/vosk/models/vosk-model-en-us-0.22.zip`
-
-and unzip them in the Models directory

@@ -126,7 +126,8 @@ def transcribe(video = "", work_dir = "word_dir/", filename="test"):
     rec.SetWords(True)
 
     transcript = []
-
+    
+    stream = resample_ffmpeg(audio_file_name)
     while True:
         data = stream.stdout.read(4000)
         if len(data) == 0:
@@ -142,10 +143,10 @@ def transcribe(video = "", work_dir = "word_dir/", filename="test"):
 def save_transcript(transcript, filename):
     """ Process vosk output and export to json and docx"""
 
-    with open("Transcripts/"+filename+".json", "w") as f:
+    with open(filename + ".json", "w") as f:
         json.dump(transcript, f)
 
-    write_docx(transcript, "Transcripts/+"filename+".docx")
+    write_docx(transcript, filename + ".docx")
 
 if __name__ == '__main__':
     # Disable vosk log
@@ -153,10 +154,10 @@ if __name__ == '__main__':
 
     videos = glob.glob('Videos/*.mp4')
     for video in videos:
-        print("Transcribing" + video)
+        print("Transcribing " + video)
 
         filename = os.path.splitext(os.path.basename(video))[0]
 
         result = transcribe(video = video, work_dir = "Videos/", filename = filename)
-        save_transcript(result, filename)
+        save_transcript(result, "Transcripts/"+filename)
 

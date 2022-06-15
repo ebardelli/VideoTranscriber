@@ -111,21 +111,9 @@ def transcribe_stream(rec, stream):
     result.append(json.loads(rec.FinalResult()))
     return result
 
-def format_result(result):
-    # Recognize speakers
-    speakers = []
-    for turn in result:
-        current_speaker = turn['spk']
-        found = 0
-        for speaker in speakers:
-            if (cosine_dist(current_speaker, speaker) < 0.1):
-                found = 1
-                break
-        if found == 0:
-            speakers.append(current_speaker)
+def recognize_speaker(result):
 
-
-    return final_result
+    return result
 
 def transcribe(video = "", work_dir = "word_dir/", filename="test"):
 

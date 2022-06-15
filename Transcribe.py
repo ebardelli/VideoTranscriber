@@ -7,7 +7,9 @@ from pathlib import Path
 from docx import Document
 from docx.shared import Cm, Mm, Inches, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-import pandas, datetime
+import datetime
+
+import glob
 
 def convert_time_stamp(timestamp: str) -> str:
     """ Function to help convert timestamps from s to H:M:S """
@@ -26,6 +28,7 @@ def write_docx(data, filename, **kwargs):
     document.sections[0].page_height = Mm(297)
     # Font
     font = document.styles["Normal"].font
+
     font.name = "Calibri"
 
     # Document title and intro
@@ -165,13 +168,12 @@ if __name__ == '__main__':
     # Disable vosk log
     SetLogLevel(-1)
 
-    #print('Enter the audio file path')
-    #path = input()
-
-    videos = ["Videos/ElementaryClassroomInstruction.mp4", "Videos/TestVideo.mp4"]
+    videos = glob.glob('Videos/*.mp4')
     for video in videos:
+        print("Transcribing" + video)
+
         filename = os.path.splitext(os.path.basename(video))[0]
 
-        result = transcribe(video, work_dir = "Videos/", filename = filename)
+        result = transcribe(video = video, work_dir = "Videos/", filename = filename)
         save_transcript(result, filename)
 

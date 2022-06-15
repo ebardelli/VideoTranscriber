@@ -1,11 +1,92 @@
 import wave, math, contextlib, os, sys, json, subprocess
 import numpy as np
 
-from moviepy.editor import AudioFileClip
-from vosk import Model, KaldiRecognizer, SetLogLevel
+from vosk import Model, SpkModel, KaldiRecognizer, SetLogLevel
 
-from pydub import AudioSegment
-from pydub.silence import split_on_silence
+from pathlib import Path
+from docx import Document
+from docx.shared import Cm, Mm, Inches, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+import pandas, datetime
+
+def convert_time_stamp(timestamp: str) -> str:
+    """ Function to help convert timestamps from s to H:M:S """
+    delta = datetime.timedelta(seconds=float(timestamp))
+    seconds = delta - datetime.timedelta(microseconds=delta.microseconds)
+    return str(seconds)
+
+def write_docx(data, filename, **kwargs):
+    """ Write a transcript from the .json transcription file. """
+    output_filename = Path(filename)
+
+    # Initiate Document
+    document = Document()
+    # A4 Size
+    document.sections[0].page_width = Mm(210)
+    document.sections[0].page_height = Mm(297)
+    # Font
+    font = document.styles["Normal"].font
+    font.name = "Calibri"
+
+    # Document title and intro
+    title = f"Transcription of filename"
+    document.add_heading(title, level=1)
+    # Set thresholds for formatting later
+    threshold_for_highlight = 0.80
+    # Intro
+    document.add_paragraph(
+        "Transcription using automatic speech recognition and"
+        " the 'tscribe' python package."
+    )
+    document.add_paragraph(
+        datetime.datetime.now().strftime("Document produced on %A %d %B %Y at %X.")
+    )
+    document.add_paragraph(
+        f"Highlighted text has less than {int(threshold_for_highlight * 100)}% confidence."
+    )
+
+    table = document.add_table(rows=1, cols=3)
+    table.style = document.styles["Light List Accent 1"]
+    table.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    # Start the first row
+    row_cells = table.add_row().cells
+    hdr_cells = table.rows[0].cells
+    hdr_cells[0].text = "Time"
+    hdr_cells[1].text = "Speaker"
+    hdr_cells[2].text = "Content"
+
+    # Add words
+    for result in data:
+        row_cells = table.add_row().cells
+
+        try:
+            # Write timestamp
+            start_time = result['result'][0]['start']
+            row_cells[0].text = convert_time_stamp(start_time)
+
+            # Write speaker
+            row_cells[1].text = "No spk data"            
+
+            for word in result['result']:
+
+                # Get the word with the highest confidence
+                # Write the word
+                run = row_cells[2].paragraphs[0].add_run(" " + word["word"])
+                if float(word["conf"]) < threshold_for_highlight:
+                    font = run.font
+                    font.color.rgb = RGBColor(100, 149, 237)
+        except KeyError:
+            pass
+
+    # Formatting transcript table widthds
+    widths = (Inches(0.6), Inches(1), Inches(5.4))
+    for row in table.rows:
+        for idx, width in enumerate(widths):
+            row.cells[idx].width = width
+
+    # Save
+    document.save(filename)
 
 def resample_ffmpeg(infile):
     stream = subprocess.Popen(
@@ -15,125 +96,82 @@ def resample_ffmpeg(infile):
         stdout=subprocess.PIPE)
     return stream
 
-def recognize_stream(rec, stream):
-    tot_samples = 0
+def transcribe_stream(rec, stream):
     result = []
+
     while True:
         data = stream.stdout.read(4000)
         if len(data) == 0:
             break
         if rec.AcceptWaveform(data):
-            tot_samples += len(data)
             result.append(json.loads(rec.Result()))
     result.append(json.loads(rec.FinalResult()))
-    return result, tot_samples
+    return result
 
-def format_result(result, output_type='txt', words_per_line=7):
-    final_result = ''
-    if output_type == 'srt':
-        subs = []
-        for i, res in enumerate(result):
-            if not 'result' in res:
-                continue
-            words = res['result']
-            for j in range(0, len(words), words_per_line):
-                line = words[j : j + words_per_line]
-                s = srt.Subtitle(index=len(subs),
-                        content = ' '.join([l['word'] for l in line]),
-                        start=datetime.timedelta(seconds=line[0]['start']),
-                        end=datetime.timedelta(seconds=line[-1]['end']))
-                subs.append(s)
-        final_result = srt.compose(subs)
-    elif output_type == 'txt':
-        for part in result:
-            final_result += part['text'] + ' '
+def format_result(result):
+    # Recognize speakers
+    speakers = []
+    for turn in result:
+        current_speaker = turn['spk']
+        found = 0
+        for speaker in speakers:
+            if (cosine_dist(current_speaker, speaker) < 0.1):
+                found = 1
+                break
+        if found == 0:
+            speakers.append(current_speaker)
+
+
     return final_result
 
-# a function that splits the audio file into chunks
-# and applies speech recognition
-def silence_based_conversion(video = "", work_dir = "word_dir/"):
-    # Extract audio from video
-    filename = os.path.splitext(os.path.basename(video))[0]
+def transcribe(video = "", work_dir = "word_dir/", filename="test"):
+
     audio_file_name = work_dir + "Audio/" + filename +".wav"
 
-    # create a directory to store the audio
-    try:
-        os.mkdir(work_dir + "Audio")
-    except FileExistsError:
-        pass
+    # Load model
+    #model_path = "Models/vosk-model-en-us-0.22/"
+    model_path = "Models/vosk-model-en-us-0.22-lgraph/"
+    #model_path = "Models/vosk-model-small-en-us-0.15/"
+    model = Model(model_path)
 
-    try:
-        # open the audio file stored in
-        # the local system as a wav file.
-        clip = AudioSegment.from_wav(audio_file_name)
-    except FileNotFoundError:
-        # Extract audio clip
-        audioclip = AudioFileClip(video)
-        audioclip.write_audiofile(audio_file_name)
-        clip = AudioSegment.from_wav(audio_file_name)
+    spk_model_path = "Models/vosk-model-spk-0.4"
+    spk_model = SpkModel(spk_model_path)
 
-    # Chunk audio using silence
-    # create a directory to store the audio chunks.
-    try:
-        os.mkdir(work_dir + "Audio/Chunks")
-    except FileExistsError:
-        pass
+    # Set up recognizer
+    rec = KaldiRecognizer(model, 16000)
+    rec.SetSpkModel(spk_model)
 
-    # split track where silence is 0.5 seconds
-    # or more and get chunks
-    chunks = split_on_silence(clip,
-        min_silence_len = 500,
-        silence_thresh = -40
-    )
+    rec.SetWords(True)
 
-    i = 0
-    # process each chunk
-    for chunk in chunks:
-        # Create 0.5 seconds silence chunk
-        chunk_silent = AudioSegment.silent(duration = 10)
+    result = transcribe_stream(rec, resample_ffmpeg(audio_file_name))
 
-        # add 0.5 sec silence to beginning and
-        # end of audio chunk. This is done so that
-        # it doesn't seem abruptly sliced.
-        audio_chunk = chunk_silent + chunk + chunk_silent
+    return result
 
-        chunkname = work_dir+"./Audio/Chunks/"+ filename+"{0}.wav".format(i)
+def save_transcript(result, filename):
+    with open("Transcripts/"+filename+".json", "w") as f:
+        json.dump(result, f)
 
-        # Set framerate and export
-        audio_chunk.set_frame_rate(16000)
-        audio_chunk.export(chunkname, bitrate ='192k', format ="wav")
+    final_result = format_result(result)
+    print(final_result)
 
-        # the name of the newly created chunk
-
-        # Load model
-        #model_path = "Models/vosk-model-en-us-0.22/"
-        model_path = "Models/vosk-model-en-us-0.22-lgraph/"
-        #model_path = "Models/vosk-model-small-en-us-0.15/"
-        model = Model(model_path)
-
-        # Set up recognizer
-        rec = KaldiRecognizer(model, 16000)
-        rec.SetWords(True)
-        SetLogLevel(-1)
-
-        result, tot_samples = recognize_stream(rec, resample_ffmpeg(chunkname))
-        final_result = format_result(result)
-        print(final_result)
-
-        f = open("Transcripts/"+filename+".txt", "a")
+    with open("Transcripts/"+filename+".txt", "w") as f:
         f.write(final_result)
         f.write("\n")
         f.close()
 
-        i += 1
-
-    os.chdir('..')
-
+    write_docx(data, "Transcripts/test.docx")
 
 if __name__ == '__main__':
+    # Disable vosk log
+    SetLogLevel(-1)
 
     #print('Enter the audio file path')
     #path = input()
 
-    silence_based_conversion("Videos/ElementaryClassroomInstruction.mp4", work_dir = "Videos/")
+    videos = ["Videos/ElementaryClassroomInstruction.mp4", "Videos/TestVideo.mp4"]
+    for video in videos:
+        filename = os.path.splitext(os.path.basename(video))[0]
+
+        result = transcribe(video, work_dir = "Videos/", filename = filename)
+        save_transcript(result, filename)
 

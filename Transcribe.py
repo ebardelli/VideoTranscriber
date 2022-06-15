@@ -17,7 +17,7 @@ def convert_time_stamp(timestamp: str) -> str:
     seconds = delta - datetime.timedelta(microseconds=delta.microseconds)
     return str(seconds)
 
-def write_docx(data, filename, **kwargs):
+def write_docx(data, filename):
     """ Write a transcript from the .json transcription file. """
     output_filename = Path(filename)
 
@@ -92,6 +92,7 @@ def write_docx(data, filename, **kwargs):
     document.save(filename)
 
 def resample_ffmpeg(infile):
+    """ Resample video with ffmpeg so it has the right framerate. """
     stream = subprocess.Popen(
         ['ffmpeg', '-nostdin', '-loglevel', 'quiet', '-i',
         infile,
@@ -99,23 +100,13 @@ def resample_ffmpeg(infile):
         stdout=subprocess.PIPE)
     return stream
 
-def transcribe_stream(rec, stream):
-    result = []
-
-    while True:
-        data = stream.stdout.read(4000)
-        if len(data) == 0:
-            break
-        if rec.AcceptWaveform(data):
-            result.append(json.loads(rec.Result()))
-    result.append(json.loads(rec.FinalResult()))
-    return result
-
 def recognize_speaker(result):
+    """ Recognize speakers from the speaker tensor space. """
 
     return result
 
 def transcribe(video = "", work_dir = "word_dir/", filename="test"):
+    """ Transcribe video with vosk api. """
 
     audio_file_name = work_dir + "Audio/" + filename +".wav"
 
@@ -134,23 +125,27 @@ def transcribe(video = "", work_dir = "word_dir/", filename="test"):
 
     rec.SetWords(True)
 
-    result = transcribe_stream(rec, resample_ffmpeg(audio_file_name))
+    transcript = []
 
-    return result
+    while True:
+        data = stream.stdout.read(4000)
+        if len(data) == 0:
+            break
+        if rec.AcceptWaveform(data):
+            transcript.append(json.loads(rec.Result()))
+    transcript.append(json.loads(rec.FinalResult()))
 
-def save_transcript(result, filename):
+    transcript_w_spk = recognize_speaker(transcript)
+
+    return transcript_w_spk
+
+def save_transcript(transcript, filename):
+    """ Process vosk output and export to json and docx"""
+
     with open("Transcripts/"+filename+".json", "w") as f:
-        json.dump(result, f)
+        json.dump(transcript, f)
 
-    final_result = format_result(result)
-    print(final_result)
-
-    with open("Transcripts/"+filename+".txt", "w") as f:
-        f.write(final_result)
-        f.write("\n")
-        f.close()
-
-    write_docx(data, "Transcripts/test.docx")
+    write_docx(transcript, "Transcripts/+"filename+".docx")
 
 if __name__ == '__main__':
     # Disable vosk log

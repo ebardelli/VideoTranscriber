@@ -152,12 +152,16 @@ if __name__ == '__main__':
     # Disable vosk log
     SetLogLevel(-1)
 
-    videos = glob.glob('Videos/*.mp4')
+    infolder = "Videos/LSA_2019 Clipped Advising Sessions/"
+    outfolder = "Transcripts/LSA_2019 Clipped Advising Sessions/"
+
+    videos = glob.glob(infolder + '*.mp4')
+
     for video in videos:
         print("Transcribing " + video)
 
         filename = os.path.splitext(os.path.basename(video))[0]
 
-        result = transcribe(video = video, work_dir = "Videos/", filename = filename)
-        save_transcript(result, "Transcripts/"+filename)
+        result = transcribe(video = video, work_dir = infolder, filename = filename)
+        save_transcript(result, outfolder + filename)
 
